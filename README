@@ -1,0 +1,17 @@
+mathRecognization is an android app with the functions of taking photo
+, figuring out the number in the photo and caculating the result.
+
+Author: Gar Shae
+
+Features:
+	Auto Focus
+	Auto number Recognization
+	Using opencv library
+	Using C++ for the Image process module
+	Using dynamic library in Android project
+
+Request:
+	Java JDk
+	Android ADK
+	Android NDK to compile C++ codes
+
