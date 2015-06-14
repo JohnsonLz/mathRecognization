@@ -1,0 +1,295 @@
+#include "Caculator.h"
+
+const int mark = 20;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void* ThreadFun(void* ptr) {
+	
+	Classify* clfp = reinterpret_cast<Classify*>(ptr);
+	clfp->CreatSVM();
+	pthread_mutex_unlock(&mutex);
+}
+
+void Caculator::translate(Processor& proc,Classify& clf) {	
+	
+	proc.Img_pro();
+	
+	for (int i = 0; i < proc.Mat_Sample_Size(); i++) {
+		int x = proc.at(i).x_position;
+		int y = proc.at(i).y_position;
+		int height = proc.at(i).height;
+		int width = proc.at(i).weight;
+
+		Mat img = proc.at(i).img;
+		int detect;
+		detect = clf.Detect(img);
+
+		_data.append(detect);
+	}
+	
+	pthread_mutex_unlock(&mutex);
+	pthread_mutex_destroy(&mutex);
+}
+
+int Caculator::_caculate_find(double* data, int start, int end, int direct) {
+
+	int max = -1;
+	int pos = -1;
+
+	if (direct) {
+		for (int i = end - 1; i >= start; i--) {
+			if (data[i] > max&&data[i]<mark&&data[i]>9) {
+				if (((data[i] == 11) && (max == 10)) || ((data[i] == 13) && (max == 12)))
+					continue;
+				max = static_cast<int>(data[i]);
+				pos = i;
+			}
+		}
+	}
+	else {
+		for (int i = start; i<end; i++) {
+			if (data[i]>max&&data[i]<mark&&data[i]>9) {
+				if (((data[i] == 11) && (max == 10)) || ((data[i] == 13) && (max ==12)))
+					continue;
+				max = static_cast<int>(data[i]);
+				pos = i;
+			}
+		}
+	}
+
+
+	switch (max) {
+	case -1:
+		return 0;
+	case 18:;
+	case 17:;
+	case 16:;
+	case 15:
+		return -1;
+	case 14:
+		data[pos] = -1;
+		return _caculate_find(data, pos, end, 0);
+	default:
+		return _caculate(data, pos, start,end);
+	}
+}
+
+int Caculator::_caculate(double* data, int pos, int min, int max) {
+
+	int mode = static_cast<int>(data[pos]);
+	double number_1 = 0;
+	double number_2 = 0;
+	int power = 1;
+
+	for (int i = pos - 1; i >= min; i--) {
+		if ( data[i] < 10&&data[i]>=0) {
+			number_1 += data[i] * power;
+			data[i] = -1;
+			power *= 10;
+		}
+		else if (data[i] >= mark || data[i] <= -mark) {
+			if (data[i]>0)
+				number_1 = data[i] - mark;
+			else
+				number_1 = data[i] + mark;
+			data[i] = -1;
+			break;
+		}
+		else if (data[i] >= 10)
+			break;
+	}
+
+	for (int i = pos + 1; i < max; i++) {
+		if (data[i] < 10 && data[i] >= 0) {
+			number_2 = number_2 * 10 + data[i];
+			data[i] = -1;
+		}
+		else if (data[i] <= -mark || data[i] >= mark) {
+			if (data[i]>0)
+				number_2 = data[i] - mark;
+			else
+				number_2 = data[i] + mark;
+			data[i] = -1;
+			break;
+		}
+		else if (data[i] >= 10)
+			break;
+	}
+
+	switch (mode) {
+	case 10: 
+		data[pos] = number_1 + number_2;
+		if (data[pos] >= 0)
+			data[pos] += mark;
+		else
+			data[pos] -= mark;
+		_caculate_find(data, min, max, 0);
+		break;
+	case 11:
+		data[pos] = number_1 - number_2;
+		if (data[pos] >= 0)
+			data[pos] += mark;
+		else
+			data[pos] -= mark;
+		_caculate_find(data, min, max, 0);
+		break;
+	case 12:
+		data[pos] = number_1*number_2;
+		if (data[pos] >= 0)
+			data[pos] += mark;
+		else
+			data[pos] -= mark;
+		_caculate_find(data, min, max, 0);
+		break;
+	case 13:
+		data[pos] = number_1 / number_2;
+		if (data[pos] >= 0)
+			data[pos] += mark;
+		else
+			data[pos] -= mark;
+		_caculate_find(data, min, max, 0);
+		break;
+	}
+	return 0;
+}
+
+double Caculator::caculate() {
+
+	int max = -1;
+	int pos = -1;
+	double result;
+
+	double* tmp = new double[_data.Size()];
+
+	for (int i = 0; i<_data.Size(); i++) {
+		tmp[i] =double( _data.at(i));
+		if (_data.at(i)>max) {
+			max = _data.at(i);
+			pos = i;
+		}
+	}
+	while (max != -1) {
+		switch (max) {
+		case 18:;
+		case 17:;
+		case 16:;
+		case 15:
+			tmp[pos] = -1; 
+			result = _caculate_find(tmp, 0, pos, 1);
+			if (result == -1) {
+				delete[]tmp;
+				return -1;
+			}
+			break;
+		case 14:
+			delete[]tmp; 
+			return -1;
+		case 13:
+		case 12:
+		case 11:
+		case 10:
+			result = _caculate_find(tmp, 0, _data.Size(), 0);
+			if (result == -1) {
+				delete[] tmp;
+				return -1;
+			}
+			break;
+		default:
+			delete[]tmp;
+			return -1;
+		}
+
+		max = -1;
+		pos = -1;
+		for (int i = 0; i < _data.Size(); i++) {
+			if (tmp[i] >= 0 && tmp[i]<mark) {
+				if (tmp[i]>max) {
+					max = static_cast<int>(tmp[i]);
+					pos = i;
+				}
+			}
+		}
+
+	}
+
+	for (int i = 0; i < _data.Size(); i++) {
+		if (tmp[i] != -1)
+			result = tmp[i];
+	}
+	if (result < 0)
+		result += mark;
+	else
+		result -= mark;
+	delete[]tmp;
+	return result;
+}
+
+char* Caculator::data() {
+
+	int* tmp = new int [_data.Size()+2];
+	int pos = 0;
+	int mark = -1;
+	for(int i=0; i<_data.Size(); i++) {
+		if(_data.at(i) > 9) {
+			if(mark != -1) {
+				tmp[pos++] = mark+18;
+				mark = -1;
+			}			
+			tmp[pos++] = _data.at(i);
+		}
+		else {
+			if(mark == -1)
+				mark = _data.at(i);
+			else
+				mark = mark*10+_data.at(i);
+		}
+	}
+	if(mark != -1)
+		tmp[pos++] = mark+18;
+	tmp[pos++] = 16;
+	tmp[pos++] = 17;
+
+	double r = caculate();
+
+	int size = 128;
+	char* buf = new char[size];
+	char* now =buf;
+	int length;
+	int used = 0;
+
+	for(int i=0; i<pos; i++) {
+		int d = tmp[i];
+		switch(d) {
+		case 10 : length = sprintf(now, " %c ", '+');break;
+		case 11 : length = sprintf(now, " %c ", '-');break;
+		case 12 : length = sprintf(now, " %c ", '*');break;
+		case 13 : length = sprintf(now, " %c ", '/');break;
+		case 14 : length = sprintf(now, "%c ", '(');break;
+		case 15 : length = sprintf(now, " %c", ')');break;
+		case 16 : length = sprintf(now, " %c ", '=');break;
+		case 17 : length = sprintf(now, " %f ", r);break;
+		default : length = sprintf(now, "%d", d-18);break;
+		}
+		
+		if(used + length > size) {
+			while(used + length > size) {
+				size*=2;
+			}
+			char* backup = new char[size];
+			for(int j=0; j<used; j++) {
+				backup[j] = buf[j];
+			}
+			delete []buf;
+			buf = backup;
+			now = buf+used;
+			i--;
+		}
+		else {
+			used += length;
+			now = buf+used;
+		}
+	}
+	
+	delete []tmp;
+	return buf;
+}

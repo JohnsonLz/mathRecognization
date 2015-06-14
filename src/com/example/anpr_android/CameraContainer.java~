@@ -1,0 +1,152 @@
+package com.example.anpr_android;
+
+
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import com.example.anpr_android.R;
+
+import android.os.Handler;
+import android.util.AttributeSet;
+import android.util.Log;
+import android.widget.RelativeLayout;
+import android.widget.Toast;
+import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.hardware.Camera;
+import android.hardware.Camera.PictureCallback;
+
+public class CameraContainer extends RelativeLayout  {
+
+	private CameraView cameraView_;
+	private FocusImageView focusImageView_;
+	private String savePath_;
+	private TakePictureListener listener_;
+	private DataHandler dataHandler_;
+	private Handler handler_;
+
+	public CameraContainer(Context context, AttributeSet attrs) {
+		super(context, attrs);
+		initView_(context);
+		handler_ = new Handler();
+
+	}
+
+	private void initView_(Context context) {
+		inflate(context, R.layout.cameracontainer, this);
+		cameraView_=(CameraView)findViewById(R.id.cameraView);
+		focusImageView_ = (FocusImageView)findViewById(R.id.focusImageView);
+		focusImageView_.startFocus(new Point(getWidth()/2, getHeight()/2), autoFocusCallback_);
+		focusImageView_.onFocus(new Point(getWidth()/2, getHeight()/2), autoFocusCallback_);	
+	}
+
+	public void setRootPath(String rootPath) {
+		this.savePath_ = rootPath;
+	}
+
+	public void takePicture() {
+		takePicture(pictureCallback_, listener_);
+	}
+
+	public void takePicture(TakePictureListener listener) {
+		this.listener_ = listener;
+		takePicture(pictureCallback_, listener_);
+	}
+
+	public void takePicture(PictureCallback callback, TakePictureListener listener) {
+		cameraView_.takePicture(callback, listener);
+	}
+	
+	private final PictureCallback pictureCallback_ = new PictureCallback() {
+		
+		@Override
+		public void onPictureTaken(byte[] data, Camera camera) {
+			if(savePath_ == null) throw new RuntimeException("savePath is null");
+			if(dataHandler_ == null) dataHandler_ = new DataHandler();
+			dataHandler_.setMaxSize(512);
+			Bitmap bm = dataHandler_.save(data);
+			camera.startPreview();
+			if(listener_ != null) listener_.onTakePictureEnd(bm);
+		}
+	};
+
+	private final AutoFocusCallback autoFocusCallback_=new AutoFocusCallback() {
+
+		@Override
+		public void onAutoFocus(boolean success, Camera camera) {
+			
+			if (success) {
+				mFocusImageView.onFocusSuccess();
+			}else {
+				mFocusImageView.onFocusFailed();
+
+			}
+		}
+	};
+	private final class DataHandler {
+
+		private String imageFolder_;
+		private int maxSize_ = 512;
+
+		public DataHandler() {
+			imageFolder_ = FileOperateUtil.getFolderPath(getContext(),FileOperateUtil.TYPE_IMAGE, savePath_);
+			File folder = new File(imageFolder_);
+			if(!folder.exists()) {
+				folder.mkdirs();
+			}
+		}
+
+		public Bitmap save(byte[] data) {
+			if(data!=null) {
+				Bitmap bm = BitmapFactory.decodeByteArray(data, 0, data.length);
+				String imgName = FileOperateUtil.createFileNmae(".jpg");
+				String imagePath = imageFolder_+File.separator+imgName;
+				Log.i("imagepath : %s \n", imagePath);
+				File file = new File(imagePath);
+				try {
+					FileOutputStream fos = new FileOutputStream(file);
+					ByteArrayOutputStream bos = compress(bm);
+					fos.write(bos.toByteArray());
+					fos.flush();
+					fos.close();
+					return bm;
+				}catch(Exception e) {
+					Log.e("cameraContainer", e.toString());
+					Toast.makeText(getContext(), "save image error", Toast.LENGTH_SHORT).show();
+				}
+			}else {
+				Toast.makeText(getContext(), "DataHandler is null", Toast.LENGTH_SHORT).show();
+			}
+			return null;
+		}
+		
+		public ByteArrayOutputStream compress(Bitmap bitmap) {
+			ByteArrayOutputStream baos = new ByteArrayOutputStream();
+			bitmap.compress(Bitmap.CompressFormat.JPEG, 100, baos);
+			int options = 99;
+			while( baos.toByteArray().length / 1024 > maxSize_) {
+				options -= 3;
+				if(options<0) {
+					break;
+				}
+				Log.i("cameraContainer", baos.toByteArray().length / 1024+"");
+				baos.reset();
+				bitmap.compress(Bitmap.CompressFormat.JPEG, options, baos);
+			}
+			Log.i("cameraContainer","compress over");
+			return baos;
+		}
+
+		public void setMaxSize(int maxSize) {
+			this.maxSize_ = maxSize;
+		}
+	}
+
+	public static interface TakePictureListener {
+
+		public void onTakePictureEnd(Bitmap bm);
+		public void onAnimtionEnd(Bitmap bm, boolean isVideo);
+	}
+
+}
